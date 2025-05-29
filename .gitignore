@@ -3,6 +3,8 @@
 
 # Virtual envs
 **/venv/
+**/venv_vapo/
+
 
 # User-specific stuff
 **/.idea/**/workspace.xml

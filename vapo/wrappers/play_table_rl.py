@@ -8,8 +8,8 @@ from gym import spaces
 import numpy as np
 import pybullet as p
 import torch
-from vr_env.envs.play_table_env import PlayTableSimEnv
-from vr_env.utils.utils import EglDeviceNotFoundError, get_egl_device_id
+from VREnv.vr_env.envs.play_table_env import PlayTableSimEnv
+from VREnv.vr_env.utils.utils import EglDeviceNotFoundError, get_egl_device_id
 
 from vapo.utils.utils import get_3D_end_points, pos_orn_to_matrix
 from vapo.wrappers.play_table_rand_scene import PlayTableRandScene

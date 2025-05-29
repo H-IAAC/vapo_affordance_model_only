@@ -1,6 +1,7 @@
 parent_folder: ../
-vapo_path: ${paths.parent_folder}/vapo/
+vapo_path: ${paths.parent_folder}/vapo_affordance_model_only/
 vr_data: ${paths.vapo_path}/VREnv/data/
+scripts: ${paths.vapo_path}/scripts/
 
 # Trained affordance models
 trained_models: ${paths.vapo_path}/trained_models/

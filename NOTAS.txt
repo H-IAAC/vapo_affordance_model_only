@@ -1,0 +1,3 @@
+export PYTHONPATH=/home/admi/vapo_affordance_model_only
+#run all scripts from the root folder, outside /scripts.
+#otherwise, yaml config paths will not work

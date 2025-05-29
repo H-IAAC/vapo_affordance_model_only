@@ -34,10 +34,10 @@ resume_model_path: ./
 
 test:
   # Absolute path where models are stored
-  models_dir: ${paths.vapo_path}/hydra_outputs
+  models_dir: ${paths.scripts}/hydra_outputs
   # Vapo
   model_name: most_tasks_from_5
-  folder_name: ${test.models_dir}/drawer/2022-03-04/19-21-57_vapo
+  folder_name: ${test.models_dir}/drawer/${now:%Y-%m-%d}/${now:%H-%M-%S}_vapo
   eval_cfg:
     n_episodes: 10
     print_all_episodes: True

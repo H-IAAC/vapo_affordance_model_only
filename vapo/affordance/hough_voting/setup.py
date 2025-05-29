@@ -10,7 +10,7 @@ setup(
         CUDAExtension(
             name="hough_voting_cuda",
             sources=["hough_voting_layer.cpp", "hough_voting_kernel.cu"],
-            include_dirs=["/usr/local/include/eigen3"],
+            include_dirs=["/usr/local/include/eigen3", "/usr/include"],
         )
     ],
     cmdclass={"build_ext": BuildExtension},

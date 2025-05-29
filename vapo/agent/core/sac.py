@@ -386,7 +386,7 @@ class SAC:
     def load(self, path, resume_training=False):
         if os.path.isfile(path):
             print("Loading checkpoint")
-            checkpoint = torch.load(path)
+            checkpoint = torch.load(path, weights_only=False)
 
             self._pi.load_state_dict(checkpoint["actor_dict"])
             self._pi_optim.load_state_dict(checkpoint["actor_optimizer_dict"])

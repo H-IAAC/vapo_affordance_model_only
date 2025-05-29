@@ -125,7 +125,7 @@ class AffordanceModel(pl.LightningModule):
     def forward(self, x):
         # in lightning, forward defines the prediction/inference actions
         features = self.unet.encoder(x)
-        decoder_output = self.unet.decoder(*features)
+        decoder_output = self.unet.decoder(features)
         aff_logits = self.unet.segmentation_head(decoder_output)
         center_direction_prediction = self.center_direction_net(decoder_output)
 
