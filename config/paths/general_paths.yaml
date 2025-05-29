@@ -1,5 +1,5 @@
 parent_folder: ../
-vapo_path: ${paths.parent_folder}/vapo_affordance_model_only/
+vapo_path: ${paths.parent_folder}/vapo_aff/
 vr_data: ${paths.vapo_path}/VREnv/data/
 scripts: ${paths.vapo_path}/scripts/
 
