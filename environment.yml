@@ -1,8 +1,6 @@
 name: vapo_env
 dependencies:
-#  - nvidia::cudatoolkit=11.3.1
-#  - numpy=1.21.2
+  - python
   - pip
-#  - python=3.9
-#  - pytorch::pytorch=1.10.0=py3.9_cuda11.3_cudnn8.2.0_0
-#  - pytorch::torchvision=0.11.1=py39_cu113
+  - nvidia::cudatoolkit
+  - numpy
