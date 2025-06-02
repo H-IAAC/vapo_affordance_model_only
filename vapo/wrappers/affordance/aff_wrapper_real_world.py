@@ -35,14 +35,6 @@ class AffordanceWrapperRealWorld(AffordanceWrapperBase):
         reward = self.reward(reward, obs, done, info["success"])
         return self.observation(obs), reward, done, info
 
-    def get_images(self, obs_cfg, obs_dict, cam_type):
-        depth_img, rgb_img = None, None
-        if obs_cfg.use_depth:
-            depth_img = obs_dict["depth_%s" % cam_type]
-        if obs_cfg.use_img:
-            rgb_img = obs_dict["rgb_%s" % cam_type]
-        return depth_img, rgb_img
-
     def observation(self, obs):
         new_obs = super(AffordanceWrapperRealWorld, self).observation(obs)
         # "rgb_obs", "depth_obs", "robot_obs","scene_obs"
@@ -63,20 +55,3 @@ class AffordanceWrapperRealWorld(AffordanceWrapperBase):
         else:
             world_pt = None
         return world_pt
-
-    def viz_curr_target(self):
-        u, v = self.target_search.static_cam.project(self.curr_detected_obj)
-        u, v = get_px_after_crop_resize(
-            (u, v), self.target_search.static_cam.crop_coords, self.target_search.static_cam.resize_resolution
-        )
-        img = self.target_search.orig_img.copy()
-        img = cv2.drawMarker(
-            img,
-            (int(u), int(v)),
-            (0, 0, 0),
-            markerType=cv2.MARKER_CROSS,
-            markerSize=15,
-            thickness=3,
-            line_type=cv2.LINE_AA,
-        )
-        cv2.imshow("detected target", img[:, :, ::-1])

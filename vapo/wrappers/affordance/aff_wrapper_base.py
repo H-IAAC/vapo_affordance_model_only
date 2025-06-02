@@ -163,12 +163,6 @@ class AffordanceWrapperBase(gym.Wrapper):
     def termination(self, done, obs):
         return done
 
-    def viz_curr_target(self):
-        return
-
-    def get_images(self, obs_cfg, obs_dict, cam_type):
-        raise NotImplementedError
-
     def get_world_pt(self, cam, pixel, depth, orig_shape):
         raise NotImplementedError
 
@@ -236,25 +230,6 @@ class AffordanceWrapperBase(gym.Wrapper):
             else:
                 new_dct[k] = v
         return new_dct
-
-    def viz_transformed(self, obs_dct):
-        """input:
-        img: torch.tensor(shape=(C, H, W)) -1 to 1
-        mask: torch.tensor(shape=(H, W, 1)) 0 or 1
-        """
-        img = obs_dct["gripper_img_obs"].permute((1, 2, 0))
-        img = img.detach().cpu().numpy()
-        img = (img + 1) / 2
-        img = (img[:, :, ::-1] * 255).astype("uint8")
-
-        if "gripper_aff" in obs_dct:
-            mask = obs_dct["gripper_aff"].squeeze()
-            mask = mask.detach().cpu().numpy()
-            mask = (mask * 255).astype("uint8")
-
-            img = overlay_mask(mask, img, (0, 0, 255))
-        img = cv2.resize(img, (200, 200))
-        cv2.imshow("transformed img", img)
 
     # Aff-center
     def find_target_center(self, cam, orig_img, depth, obs):
