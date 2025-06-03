@@ -166,6 +166,9 @@ class AffordanceWrapperBase(gym.Wrapper):
     def get_world_pt(self, cam, pixel, depth, orig_shape):
         raise NotImplementedError
 
+    # If called with static cam, just returns the images via obs{}. 
+    # If called with gripper cam, calculates and returns affordance and
+    # center prediction too, via viz_dict{}.
     def get_cam_obs(self, obs_dict, cam_type, aff_net, obs_cfg, aff_cfg):
         obs, viz_dict = {}, {}
         depth_img, rgb_img = self.get_images(obs_cfg, obs_dict, cam_type)
@@ -184,6 +187,11 @@ class AffordanceWrapperBase(gym.Wrapper):
             or self.affordance_cfg.gripper_cam.use_distance
         )
 
+        # Basically only runs affordance and center prediction if the cam is gripper cam.
+        # (except if aff_cfg.use, referent to the main script calling everything, has this
+        #  affordance parameter set to True, which doesn't seem to be used often).
+        # Contains great duplicity with affordance/utils/img_utils.py function
+        # transform_and_predict(). 
         if aff_net is not None and (aff_cfg.use or get_gripper_target):
             with torch.no_grad():
                 # Np array 1, H, W

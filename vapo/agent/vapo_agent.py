@@ -288,9 +288,9 @@ class VAPOAgent(SAC):
             while episode_length < max_episode_length and self.no_detected_target < 3 and not done:
                 # sample action and scale it to action space
                 s = env.transform_obs(tt(s), "validation")
-                a, _ = self._pi.act(s, deterministic=True)
+                a, _ = self._pi.act(s, deterministic=True) # SAC action
                 a = a.cpu().detach().numpy()
-                ns, r, done, info = env.step(a)
+                ns, r, done, info = env.step(a) # environment step for task verification
                 s = ns
                 episode_return += r
                 episode_length += 1
