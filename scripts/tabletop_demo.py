@@ -2,7 +2,7 @@ import os
 
 import hydra
 
-from vapo.agent.vapo_agent import VAPOAgent
+from vapo.agent.vapo_agent_affordance import VAPOAgent
 from vapo.utils.utils import load_cfg
 from vapo.wrappers.affordance.aff_wrapper_sim import AffordanceWrapperSim
 from vapo.wrappers.play_table_rl import PlayTableRL
