@@ -15,8 +15,7 @@ class VAPOAgent():
         self.no_detected_target = 0
 
         args = {"initial_pos": self.origin, "aff_transforms": _aff_transforms, **cfg.target_search}
-        _class_label = self.get_task_label()
-        self.target_search = TargetSearch(self.env, class_label=_class_label, **args)
+        self.target_search = TargetSearch(self.env, **args)
 
         # Target specifics
         self.env.target_search = self.target_search

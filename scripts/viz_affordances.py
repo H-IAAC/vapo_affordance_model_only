@@ -1,4 +1,3 @@
-# from torch.utils.data import DataLoader
 import json
 import os
 
@@ -64,6 +63,8 @@ def viz(cfg):
     # Create output directory if save_images
     if not os.path.exists(cfg.output_dir) and cfg.save_images:
         os.makedirs(cfg.output_dir)
+    
+    # Load model based on hydra config file
     model, run_cfg = load_from_hydra(cfg)
 
     # Transforms
@@ -74,24 +75,25 @@ def viz(cfg):
 
     transforms_cfg = run_cfg.dataset.transforms_cfg
     img_size = run_cfg.dataset.img_resize[cam_type]
-    img_transform = get_transforms(transforms_cfg.validation, img_size)
+    aff_transforms = get_transforms(transforms_cfg.validation, img_size)
 
-    # Iterate images
+    # Image files input and preprocessing
     files, np_comprez = get_filenames(cfg.data_dir, get_eval_files=cfg.get_eval_files, cam_type=cam_type)
     out_shape = (cfg.out_size, cfg.out_size)
     for filename in tqdm.tqdm(files):
         if np_comprez:
             data = np.load(filename)
             rgb_img = data["frame"]
+            # gt == ground truth
             gt_mask = data["mask"].squeeze()
             gt_mask = (gt_mask / 255).astype("uint8")
             gt_directions = data["directions"]
         else:
             rgb_img = cv2.imread(filename, cv2.COLOR_BGR2RGB)
             out_shape = np.shape(rgb_img)[:2]
-        res = transform_and_predict(model, img_transform, rgb_img)
+        res = transform_and_predict(model, aff_transforms, rgb_img)
         centers, mask, directions, probs, _ = res
-        affordances, aff_img, flow_over_img, flow_img = get_aff_imgs(
+        affordance_mask, aff_img, flow_over_img, flow_img = get_aff_imgs(
             rgb_img,
             mask,
             directions,
@@ -100,24 +102,27 @@ def viz(cfg):
             cam=cam_type,
             n_classes=probs.shape[-1],
         )
-        # Ground truth
-        gt_directions = torch.tensor(gt_directions).permute(2, 0, 1)
-        gt_directions = gt_directions.unsqueeze(0).contiguous().float().cuda()
-        if model.n_classes > 2:
-            gt_mask = np.vstack([np.zeros((1, *gt_mask.shape[1:])), gt_mask])
-            gt_mask = gt_mask.argmax(axis=0).astype("int32")
-        gt_mask_cuda = torch.tensor(gt_mask).unsqueeze(0).cuda()
-        gt_centers, gt_directions, _ = model.get_centers(gt_mask_cuda, gt_directions)
-        gt_directions = torch_to_numpy(gt_directions[0].permute(1, 2, 0))
-        gt_aff, gt_aff_img, gt_res, gt_flow = get_aff_imgs(
-            rgb_img,
-            gt_mask.squeeze(),
-            gt_directions,
-            data["centers"],
-            out_shape,
-            cam=cam_type,
-            n_classes=model.n_classes,
-        )
+
+        # Calculate ground truth, if file contains this data
+        if np_comprez:
+            gt_directions = torch.tensor(gt_directions).permute(2, 0, 1)
+            gt_directions = gt_directions.unsqueeze(0).contiguous().float().cuda()
+            if model.n_classes > 2:
+                gt_mask = np.vstack([np.zeros((1, *gt_mask.shape[1:])), gt_mask])
+                gt_mask = gt_mask.argmax(axis=0).astype("int32")
+            gt_mask_cuda = torch.tensor(gt_mask).unsqueeze(0).cuda()
+            gt_centers, gt_directions, _ = model.get_centers(gt_mask_cuda, gt_directions)
+            gt_directions = torch_to_numpy(gt_directions[0].permute(1, 2, 0))
+            gt_aff, gt_aff_img, gt_res, gt_flow = get_aff_imgs(
+                rgb_img,
+                gt_mask.squeeze(),
+                gt_directions,
+                data["centers"],
+                out_shape,
+                cam=cam_type,
+                n_classes=model.n_classes,
+            )
+        
         # Save and show
         if cfg.save_images:
             _, tail = os.path.split(filename)

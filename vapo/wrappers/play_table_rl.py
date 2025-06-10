@@ -20,10 +20,6 @@ logger = logging.getLogger(__name__)
 class PlayTableRL(PlayTableSimEnv):
     def __init__(self, task="slide", sparse_reward=False, max_counts=50, viz=False, save_images=False, **args):
         if "use_egl" in args and args["use_egl"]:
-            # if("CUDA_VISIBLE_DEVICES" in os.environ):
-            #     device_id = os.environ["CUDA_VISIBLE_DEVICES"]
-            #     device = int(device_id)
-            # else:
             device = torch.cuda.current_device()
             device = torch.device(device)
             self.set_egl_device(device)
@@ -37,19 +33,9 @@ class PlayTableRL(PlayTableSimEnv):
             "rgb_obs": gym.spaces.Box(low=0, high=255, shape=(3, 300, 300)),
             "depth_obs": gym.spaces.Box(low=0, high=255, shape=(1, 300, 300)),
         }
-        self.observation_space = gym.spaces.Dict(obs_space_dict)
-        self.sparse_reward = sparse_reward
-        self.offset = np.array([*args["offset"], 1])
-        self.reward_fail = args["reward_fail"]
-        self.reward_success = args["reward_success"]
-        self._obs_it = 0
         self.viz = viz
         self.save_images = save_images
         self.cam_ids = find_cam_ids(self.cameras)
-
-        self._rand_scene = "rand_scene" in args
-        _initial_obs = self.get_obs()["robot_obs"]
-        self._start_orn = _initial_obs[3:6]
 
         self.load()
 

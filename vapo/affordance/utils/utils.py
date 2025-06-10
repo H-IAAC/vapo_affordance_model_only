@@ -36,6 +36,9 @@ def get_transforms(transforms_cfg, img_size=None):
     return transforms.Compose(transforms_lst)
 
 
+# Load affordance model from a hydra configuration. Hyperparameters
+# and model configuration are loaded from the hydra config file.
+# Has the same functionality of init_aff_net() in vapo/utils/utils.py
 def load_from_hydra(cfg):
     # Initialize model
     model_path = get_abs_path(cfg.model_path)

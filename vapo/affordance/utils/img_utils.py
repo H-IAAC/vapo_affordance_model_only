@@ -201,13 +201,13 @@ def get_aff_imgs(rgb_img, mask, directions, centers, out_shape=None, cam="", n_c
     out_shape = tuple(out_shape)
 
     orig_img = cv2.resize(rgb_img, out_shape)
-    cm = plt.get_cmap("tab10")
+    colormap = plt.get_cmap("tab10")
 
     # Affordance segmentation
     if n_classes > 2:
         aff_img = orig_img
         # Not showing background
-        colors = cm(np.linspace(0, 1, n_classes - 1))[:, :3]
+        colors = colormap(np.linspace(0, 1, n_classes - 1))[:, :3]
         colors = (colors * 255).astype("uint8")
         for i in range(1, n_classes):
             obj_mask = np.zeros_like(mask, dtype="uint8")  # (img_size, img_size)

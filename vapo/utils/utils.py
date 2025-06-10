@@ -39,6 +39,9 @@ def torch_to_numpy(x):
     return x.detach().cpu().numpy()
 
 
+# Load affordance model from function parameters. For a general,
+# hydra dependant functionality, check function load_from_hydra()
+# in vapo/affordance/utils/utils.py
 def init_aff_net(affordance_cfg, cam_str=None, in_channels=1):
     aff_net = None
     if affordance_cfg is not None:

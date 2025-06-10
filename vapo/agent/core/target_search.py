@@ -11,7 +11,7 @@ from vapo.utils.utils import init_aff_net
 
 class TargetSearch:
     def __init__(
-        self, env, mode: str, aff_transforms=None, aff_cfg=None, class_label=None, initial_pos=None, **kwargs
+        self, env, mode: str, aff_transforms=None, aff_cfg=None, initial_pos=None, **kwargs
     ) -> None:
         self.env = env
         self.mode = mode
@@ -21,7 +21,6 @@ class TargetSearch:
         self.affordance_cfg = aff_cfg
         self.global_obs_it = 0
         self.aff_net_static_cam = init_aff_net(aff_cfg)
-        self.class_label = class_label
         self.box_mask = None
         self.save_images = env.save_images
 
@@ -48,10 +47,10 @@ class TargetSearch:
             res = self._compute_sim(env, noisy, rand_sample, return_all_centers)
         return res
 
-    def _compute_real_world(self, env, return_all_centers, rand_sample):
+    def _compute_real_world(self, return_all_centers, rand_sample):
         orig_img, depth_img = self.static_cam.get_image()
         self.orig_img = orig_img
-        res = self._compute_target_aff(env, self.static_cam, depth_img, orig_img, rand_sample=rand_sample)
+        res = self._compute_target_aff(self.static_cam, depth_img, orig_img, rand_sample=rand_sample)
         target_pos, no_target, world_pts = res
         max_height = -1
         for pt in world_pts:
@@ -71,7 +70,7 @@ class TargetSearch:
         self.orig_img = orig_img
         if self.mode == "affordance":
             # Get environment observation
-            res = self._compute_target_aff(env, self.static_cam, depth_obs, orig_img, rand_sample)
+            res = self._compute_target_aff(self.static_cam, depth_obs, orig_img, rand_sample)
             target_pos, no_target, object_centers = res
             if noisy:
                 target_pos += np.random.normal(loc=0, scale=[0.005, 0.005, 0.01], size=(len(target_pos)))
@@ -132,7 +131,7 @@ class TargetSearch:
         return target_pos, no_target
 
     # Aff-center model
-    def _compute_target_aff(self, env, cam, depth_obs, orig_img, rand_sample=True):
+    def _compute_target_aff(self, cam, depth_obs, orig_img, rand_sample=True):
         """
         orig_img (numpy.ndarray, int64): rgb, 0-255 [3 x H x W]
         """
@@ -142,9 +141,9 @@ class TargetSearch:
         )
         centers, aff_mask, directions, aff_probs, object_masks = res
         # Visualize predictions
-        if env.viz or self.save_images:
+        if self.save_images:
             img_dict = viz_aff_centers_preds(
-                orig_img, aff_mask, directions, centers, "static", self.global_obs_it, viz=env.viz
+                orig_img, aff_mask, directions, centers, "static", self.global_obs_it, viz=True
             )
             if self.save_images:
                 for img_path, img in img_dict.items():
@@ -185,7 +184,7 @@ class TargetSearch:
             world_pts.append(world_pt)
 
         # Recover target
-        if self.env.viz or self.save_images:
+        if self.save_images:
             v, u = resize_center(centers[target_idx], pred_shape, new_shape)
             out_img = cv2.drawMarker(
                 np.array(orig_img),

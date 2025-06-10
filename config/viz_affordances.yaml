@@ -10,6 +10,7 @@ get_eval_files: True
 model_path: ./hydra_outputs/affordance_model/2022-02-01/22-05-41
 model_name: last.ckpt
 
+# Path for image input dataset. Change as needed.
 dataset_name: tabletop/tabletop_kitchen
 data_dir: ${paths.datasets}/${dataset_name}
 
