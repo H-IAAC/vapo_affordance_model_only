@@ -83,7 +83,7 @@ def calcutate_gt(rgb_img, gt_directions, centers, out_shape, model, cam_type):
     return gt_aff, gt_aff_img, gt_res, gt_flow
 
 
-# run python ./scripts/viz_affordances.py data_dir=datasets/playdata/demo_affordance/npz_files
+# Run the code: python ./scripts/viz_affordances.py data_dir=datasets/playdata/demo_affordance/npz_files
 @hydra.main(config_path="../config", config_name="viz_affordances")
 def viz(cfg):
     # Create output directory if save_images
