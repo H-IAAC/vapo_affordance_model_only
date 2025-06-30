@@ -139,11 +139,11 @@ class TargetSearch:
         res = transform_and_predict(
             self.aff_net_static_cam, self.aff_transforms, orig_img, class_label=self.class_label
         )
-        centers, aff_mask, directions, aff_probs, object_masks = res
+        centers, mask, directions, aff_probs, object_masks = res
         # Visualize predictions
         if self.save_images:
             img_dict = viz_aff_centers_preds(
-                orig_img, aff_mask, directions, centers, "static", self.global_obs_it, viz=True
+                orig_img, mask, directions, centers, "static", self.global_obs_it, viz=True
             )
             if self.save_images:
                 for img_path, img in img_dict.items():
@@ -176,7 +176,7 @@ class TargetSearch:
 
         # World coords
         world_pts = []
-        pred_shape = aff_mask.shape[:2]
+        pred_shape = mask.shape[:2]
         new_shape = depth_obs.shape[:2]
         for o in centers:
             o = resize_center(o, pred_shape, new_shape)

@@ -1,18 +1,57 @@
 defaults:
   - paths: general_paths
-  - model_cfg: default
-  - transforms: grayscale
+  - aff_model@model_cfg: default
+  - transforms@dataset.transforms_cfg: rgb
   - override hydra/hydra_logging: colorlog
   - override hydra/job_logging: colorlog
-get_eval_files: True
+
+get_eval_files: False
+
+n_epochs: 50
+rand_crop: 0.8
+
+model_cfg:
+  n_classes: 2
+  input_channels: 3 
+
 
 # load model
-model_path: ./hydra_outputs/affordance_model/2022-02-01/22-05-41
-model_name: last.ckpt
+gripper_cam_aff_path: ${paths.trained_models}/affordance/gripper_tabletop.ckpt
+static_cam_aff_path: ${paths.trained_models}/affordance/static_tabletop.ckpt
+model_path: ${static_cam_aff_path}
+model_name: vapo
 
-# Path for image input dataset. Change as needed.
-dataset_name: tabletop/tabletop_kitchen
+test:
+  folder_name: ${paths.vapo_path}/trained_models/policy/tabletop/vapo
+
+# Path for image input dataset
+dataset_name: tabletop
 data_dir: ${paths.datasets}/${dataset_name}
+dataset:
+  cam: static
+  img_resize:
+      static: 200
+      gripper: 64
+      all: 100  # Resize to this if using all images
+  radius:
+      static: 14
+      gripper: 10
+
+dataloader:
+  num_workers: 4
+  batch_size: 128
+  pin_memory: true
+
+trainer:
+  gpus: -1
+  max_epochs: ${n_epochs}
+  num_sanity_val_steps: 1
+  strategy: ddp
+  precision: 16
+
+wandb:
+  project: affordance_model
+  mode: offline
 
 # For visualization
 out_size: 200
@@ -28,4 +67,4 @@ output_dir: ./predictions/
 save_dir: ./hydra_outputs/viz/
 hydra:
   run:
-    dir: ${save_dir}/viz # Output directory for normal runs
+    dir: ${save_dir}${now:%Y-%m-%d}/${now:%H-%M-%S} # Output directory for normal runs

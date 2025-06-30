@@ -37,7 +37,7 @@ def get_filenames(data_dir, get_eval_files=False, cam_type=""):
                 print("Path does not exist: %s" % data_dir)
                 return [], False
             for ext in ["npz", "jpg", "png"]:
-                search_str = "**/%s*/**/*.%s" % (cam_type, ext)
+                search_str = "**/%s*/*.%s" % (cam_type, ext)
                 files += get_files_regex(data_dir, search_str, recursive=True)
                 if len(files) > 0 and ext == "npz":
                     np_comprez = True
@@ -83,6 +83,7 @@ def calcutate_gt(rgb_img, gt_directions, centers, out_shape, model, cam_type):
     return gt_aff, gt_aff_img, gt_res, gt_flow
 
 
+# run python ./scripts/viz_affordances.py data_dir=datasets/playdata/demo_affordance/npz_files
 @hydra.main(config_path="../config", config_name="viz_affordances")
 def viz(cfg):
     # Create output directory if save_images
@@ -90,7 +91,10 @@ def viz(cfg):
         os.makedirs(cfg.output_dir)
     
     # Load model based on hydra config file
-    model, run_cfg = load_from_hydra(cfg)
+    original_dir = hydra.utils.get_original_cwd()
+    run_dir = os.path.join(original_dir, cfg.test.folder_name)
+    run_dir = os.path.abspath(run_dir)
+    model, run_cfg = load_from_hydra(os.path.join(run_dir, ".hydra/config.yaml"), cfg)
 
     # Transforms
     if "cam_data" in cfg:
@@ -109,6 +113,7 @@ def viz(cfg):
         if np_comprez:
             data = np.load(filename)
             rgb_img = data["frame"]
+            d_img = data["d_img"]
             # gt == ground truth
             gt_mask = data["mask"].squeeze()
             gt_mask = (gt_mask / 255).astype("uint8")
@@ -117,8 +122,14 @@ def viz(cfg):
             rgb_img = cv2.imread(filename, cv2.COLOR_BGR2RGB)
             out_shape = np.shape(rgb_img)[:2]
         
+        # Debug:
+        print("Affordance transforms:")
+        print(aff_transforms)
+        print("Image shape:", rgb_img.shape)
+        print(rgb_img.shape)
+        
         res = transform_and_predict(model, aff_transforms, rgb_img)
-        centers, mask, directions, probs, _ = res
+        centers, mask, directions, aff_probs, object_masks = res
         affordance_mask, aff_over_img, flow_over_img, flow_img = get_aff_imgs(
             rgb_img,
             mask,
@@ -126,8 +137,18 @@ def viz(cfg):
             centers,
             out_shape,
             cam=cam_type,
-            n_classes=probs.shape[-1],
+            n_classes=aff_probs.shape[-1],
         )
+
+
+
+        '''
+        TODO: TRANSFER TARGET PREDICTION AND SELECTION CODE
+        FROM _compute_target_aff() AT target_search.py STARTING
+        ON LINE 155
+        '''
+
+
 
         # Calculate ground truth, if file contains this data
         if np_comprez:
@@ -148,7 +169,7 @@ def viz(cfg):
             # ext = split[-1]
             output_file = os.path.join(cfg.output_dir, name + ".png")
             cv2.imwrite(output_file, flow_over_img)
-            
+
         if cfg.imshow:
             cv2.imshow("Affordance masks", aff_over_img[:, :, ::-1])
             cv2.imshow("flow", flow_img[:, :, ::-1])
