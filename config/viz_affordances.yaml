@@ -1,7 +1,8 @@
 defaults:
   - paths: general_paths
   - aff_model@model_cfg: default
-  - transforms@dataset.transforms_cfg: rgb
+  #- transforms@dataset.transforms_cfg: rgb
+  - transforms@affordance.transforms: aff_transforms
   - override hydra/hydra_logging: colorlog
   - override hydra/job_logging: colorlog
 
