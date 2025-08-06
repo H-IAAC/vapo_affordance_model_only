@@ -1,7 +1,7 @@
 defaults:
   - paths: general_paths
   - aff_model@model_cfg: default
-  #- transforms@dataset.transforms_cfg: rgb
+  - camera_conf: tabletop_render # Uses tabletop_sideview.yaml (placeholder for test data)
   - transforms@affordance.transforms: aff_transforms
   - override hydra/hydra_logging: colorlog
   - override hydra/job_logging: colorlog
@@ -55,13 +55,11 @@ wandb:
   mode: offline
 
 # For visualization
+calculate_gt: False  # Calculate ground truth affordances from data in the npz files
 out_size: 200
 save_images: False
 imshow: True
 output_dir: ./predictions/
-
-# Uncomment to specify a camera, otherwise it will look for the folder of the camera used for training
-# cam_data: static
 
 #-- Hydra config --#
 # hydra output will be stored to save_dir

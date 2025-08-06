@@ -6,156 +6,250 @@ import hydra
 from hydra.utils import get_original_cwd
 import numpy as np
 from omegaconf.listconfig import ListConfig
-import torch
 import tqdm
 
 from vapo.affordance.dataset_creation.core.utils import get_files, get_files_regex
-from vapo.affordance.utils.img_utils import get_aff_imgs, transform_and_predict
-from vapo.affordance.utils.utils import get_abs_path, get_transforms, load_from_hydra, torch_to_numpy
+from vapo.affordance.utils.img_utils import get_aff_imgs, resize_center, transform_and_predict
+from vapo.affordance.utils.utils import get_abs_path, get_transforms, load_from_hydra
+from vapo.agent.static_camera import StaticCamera
 
 
-def get_filenames(data_dir, get_eval_files=False, cam_type=""):
-    files = []
-    np_comprez = False
-    if isinstance(data_dir, ListConfig):
-        for dir_i in data_dir:
-            dir_i = get_abs_path(dir_i)
-            if not os.path.exists(dir_i):
-                print("Path does not exist: %s" % dir_i)
-                continue
-            files += get_files(dir_i, "npz")
-            if len(files) > 0:
-                np_comprez = True
-            files += get_files(dir_i, "jpg")
-            files += get_files(dir_i, "png")
-    else:
-        if get_eval_files:
-            files, np_comprez = get_validation_files(data_dir, cam_type)
-        else:
-            data_dir = get_abs_path(data_dir)
-            if not os.path.exists(data_dir):
-                print("Path does not exist: %s" % data_dir)
-                return [], False
-            for ext in ["npz", "jpg", "png"]:
-                search_str = "**/%s*/*.%s" % (cam_type, ext)
-                files += get_files_regex(data_dir, search_str, recursive=True)
-                if len(files) > 0 and ext == "npz":
-                    np_comprez = True
-    return files, np_comprez
+class VizAffordances:
 
+    def __init__(self, cfg):
+        self.model, self.cfg = self.init_model(cfg)
 
-# Load validation files for custom datase
-def get_validation_files(data_dir, cam_type):
-    data_dir = os.path.join(get_original_cwd(), data_dir)
-    data_dir = os.path.abspath(data_dir)
-    json_file = os.path.join(data_dir, "episodes_split.json")
-    with open(json_file) as f:
-        data = json.load(f)
-    d = []
-    for ep, imgs in data["validation"].items():
-        im_lst = [data_dir + "/%s/data/%s.npz" % (ep, img_path) for img_path in imgs if cam_type in img_path]
-        d.extend(im_lst)
-    return d, True
-
-
-# Run the code: python ./scripts/viz_affordances.py data_dir=datasets/playdata/demo_affordance/npz_files
-@hydra.main(config_path="../config", config_name="viz_affordances")
-def viz(cfg):
-    # Create output directory if save_images
-    if not os.path.exists(cfg.output_dir) and cfg.save_images:
-        os.makedirs(cfg.output_dir)
+        # Create output directory if save_images
+        if not os.path.exists(self.cfg.output_dir) and self.cfg.save_images:
+            os.makedirs(self.cfg.output_dir)
+        
+        self.cam_type = self.cfg.dataset.cam
+        #self.cam = StaticCamera()
+        
+        # Transforms
+        self.img_size = self.cfg.dataset.img_resize[self.cam_type]
+        self.aff_transforms = get_transforms(self.cfg.affordance.transforms.validation, self.img_size)
+        # Image files input and preprocessing
+        self.files, self.np_comprez = self.get_filenames()
+        self.calculate_gt = self.cfg.calculate_gt
+        self.out_shape = (self.cfg.out_size, self.cfg.out_size)
     
+
     # Load model based on hydra config file
-    original_dir = hydra.utils.get_original_cwd()
-    run_dir = os.path.join(original_dir, cfg.test.folder_name)
-    run_dir = os.path.abspath(run_dir)
-    model, run_cfg = load_from_hydra(os.path.join(run_dir, ".hydra/config.yaml"), cfg)
+    def init_model(self, cfg):
+        original_dir = hydra.utils.get_original_cwd()
+        run_dir = os.path.join(original_dir, cfg.test.folder_name)
+        run_dir = os.path.abspath(run_dir)
+        return load_from_hydra(os.path.join(run_dir, ".hydra/config.yaml"), cfg)
 
-    # Transforms
-    if "cam_data" in cfg:
-        cam_type = cfg.cam_data
-    else:
-        cam_type = run_cfg.dataset.cam
 
-    transforms_cfg = run_cfg.affordance.transforms
-    img_size = run_cfg.dataset.img_resize[cam_type]
-    
-    aff_transforms = get_transforms(transforms_cfg.validation, img_size)
+    def run(self):
+        for filename in tqdm.tqdm(self.files):
 
-    # Image files input and preprocessing
-    files, np_comprez = get_filenames(cfg.data_dir, get_eval_files=cfg.get_eval_files, cam_type=cam_type)
-    out_shape = (cfg.out_size, cfg.out_size)
-    for filename in tqdm.tqdm(files):
-        if np_comprez:
-            data = np.load(filename)
-            rgb_img = data["frame"]
-            d_img = data["d_img"] # depth image
+            if self.np_comprez:
+                rgb_img, d_img, gt_centers, gt_mask, gt_directions = self.unpack_npz(filename)
+            else:
+                rgb_img = cv2.imread(filename, cv2.COLOR_BGR2RGB)
+                self.out_shape = np.shape(rgb_img)[:2]
+            
+            # Affordance prediction
+            res = transform_and_predict(self.model, self.aff_transforms, rgb_img)
+            centers, mask, directions, aff_probs, object_masks = res
+            affordance_mask, aff_over_img, flow_over_img, flow_img = get_aff_imgs(
+                rgb_img,
+                mask,
+                directions,
+                centers,
+                self.out_shape,
+                cam=self.cam_type,
+                n_classes=aff_probs.shape[-1],
+            )
+
+            # Calculate for ground truth if applicable
+            if self.np_comprez and self.calculate_gt:
+                gt_aff, gt_aff_img, gt_flow_img, gt_flow = get_aff_imgs(
+                rgb_img,
+                gt_mask.squeeze(),
+                gt_directions,
+                gt_centers,
+                self.out_shape,
+                cam=self.cam_type,
+                n_classes=self.model.n_classes,
+            )
+            else:
+                gt_aff = None
+                gt_aff_img = None
+                gt_flow_img = None
+                gt_flow = None
+
+            #res = self.compute_target(rgb_img, d_img, centers, mask, aff_probs, object_masks)
+            #target_pos, no_target, world_pts, target_img = res
+
+            # Save and show
+            if self.cfg.save_images:
+                self.save_images(filename, flow_over_img)
+            if self.cfg.imshow:
+                self.show_images(
+                    affordance_mask,
+                    aff_over_img,
+                    flow_img,
+                    flow_over_img,
+                    #target_img,
+                    #no_target,
+                    (self.np_comprez and self.calculate_gt),
+                    gt_aff,
+                    gt_aff_img,
+                    gt_flow,
+                    gt_flow_img,
+                )
+
+    '''
+    # from taget_search.py
+    def compute_target(self, rgb_img, d_img, centers, mask, aff_probs, object_masks):
+
+        # No center detected
+        no_target = len(centers) <= 0
+        if no_target:
+            return np.array(None), no_target, []
+
+        max_robustness = 0
+        obj_class = np.unique(object_masks)[1:]
+        obj_class = obj_class[obj_class != 0]  # remove background class
+
+        # Look for most likely center
+        for i, o in enumerate(centers):
+            # Mean prob of being class 1 (foreground)
+            robustness = np.mean(aff_probs[object_masks == obj_class[i], 1])
+            if robustness > max_robustness:
+                max_robustness = robustness
+                target_idx = i
+
+        # World coords
+        world_pts = []
+        pred_shape = mask.shape[:2]
+        new_shape = d_img.shape[:2]
+        for o in centers:
+            o = resize_center(o, pred_shape, new_shape)
+            world_pt = self.get_world_pt(o, cam, d_img, env)
+            world_pts.append(world_pt)
+
+        # Recover target
+        v, u = resize_center(centers[target_idx], pred_shape, new_shape)
+        target_img = cv2.drawMarker(
+            np.array(rgb_img),
+            (u, v),
+            (255, 0, 0),
+            markerType=cv2.MARKER_CROSS,
+            markerSize=15,
+            thickness=3,
+            line_type=cv2.LINE_AA,
+        )
+        
+        target_pos = world_pts[target_idx]
+        return target_pos, no_target, world_pts, target_img
+    '''
+
+    def unpack_npz(self, filename):
+        data = np.load(filename)
+        rgb_img = data["frame"]
+        d_img = data["d_img"] # depth image
+        if self.calculate_gt:
             # gt == ground truth
             gt_centers = data["centers"]
             gt_mask = data["mask"].squeeze()
             gt_mask = (gt_mask / 255).astype("uint8")
             gt_directions = data["directions"]
         else:
-            rgb_img = cv2.imread(filename, cv2.COLOR_BGR2RGB)
-            out_shape = np.shape(rgb_img)[:2]
-        
-        res = transform_and_predict(model, aff_transforms, rgb_img)
-        centers, mask, directions, aff_probs, object_masks = res
-        affordance_mask, aff_over_img, flow_over_img, flow_img = get_aff_imgs(
-            rgb_img,
-            mask,
-            directions,
-            centers,
-            out_shape,
-            cam=cam_type,
-            n_classes=aff_probs.shape[-1],
-        )
+            gt_centers = None
+            gt_mask = None
+            gt_directions = None
+        return rgb_img, d_img, gt_centers, gt_mask, gt_directions
 
 
+    def get_filenames(self):
+        data_dir = self.cfg.data_dir
+        get_eval_files = self.cfg.get_eval_files
+        cam_type = self.cam_type
+        files = []
+        np_comprez = False
+        if isinstance(data_dir, ListConfig):
+            for dir_i in data_dir:
+                dir_i = get_abs_path(dir_i)
+                if not os.path.exists(dir_i):
+                    print("Path does not exist: %s" % dir_i)
+                    continue
+                files += get_files(dir_i, "npz")
+                if len(files) > 0:
+                    np_comprez = True
+                files += get_files(dir_i, "jpg")
+                files += get_files(dir_i, "png")
+        else:
+            if get_eval_files:
+                files, np_comprez = self.get_validation_files(self)
+            else:
+                data_dir = get_abs_path(data_dir)
+                if not os.path.exists(data_dir):
+                    print("Path does not exist: %s" % data_dir)
+                    return [], False
+                for ext in ["npz", "jpg", "png"]:
+                    search_str = "**/%s*/*.%s" % (cam_type, ext)
+                    files += get_files_regex(data_dir, search_str, recursive=True)
+                    if len(files) > 0 and ext == "npz":
+                        np_comprez = True
+        return files, np_comprez
 
-        '''
-        TODO: TRANSFER TARGET PREDICTION AND SELECTION CODE
-        FROM _compute_target_aff() AT target_search.py STARTING
-        ON LINE 155
-        '''
 
-        # Calculate ground truth, if file contains this data
-        if np_comprez:
-            gt_aff, gt_aff_img, gt_flow_img, gt_flow = get_aff_imgs(
-            rgb_img,
-            gt_mask.squeeze(),
-            gt_directions,
-            gt_centers,
-            out_shape,
-            cam=cam_type,
-            n_classes=model.n_classes,
-        )
+    # Load validation files for custom dataset
+    def get_validation_files(self):
+        data_dir = self.cfg.data_dir
+        cam_type = self.cam_type
+        data_dir = os.path.join(get_original_cwd(), data_dir)
+        data_dir = os.path.abspath(data_dir)
+        json_file = os.path.join(data_dir, "episodes_split.json")
+        with open(json_file) as f:
+            data = json.load(f)
+        d = []
+        for ep, imgs in data["validation"].items():
+            im_lst = [data_dir + "/%s/data/%s.npz" % (ep, img_path) for img_path in imgs if cam_type in img_path]
+            d.extend(im_lst)
+        return d, True
 
-        # Save and show
-        if cfg.save_images:
-            _, tail = os.path.split(filename)
-            split = tail.split(".")
-            name = "".join(split[:-1])
+    def save_images(self, filename, img):
+        _, tail = os.path.split(filename)
+        split = tail.split(".")
+        name = "".join(split[:-1])
 
-            output_dir = os.path.join(hydra.utils.get_original_cwd(), cfg.output_dir)
-            os.makedirs(output_dir, exist_ok=True)
-            output_file = os.path.join(output_dir, name + ".png")
+        output_dir = os.path.join(hydra.utils.get_original_cwd(), self.cfg.output_dir)
+        os.makedirs(output_dir, exist_ok=True)
+        output_file = os.path.join(output_dir, name + ".png")
 
-            cv2.imwrite(output_file, flow_over_img[:, :, ::-1])  # Flip channel order
-            print("Saved %s" % output_file)
+        cv2.imwrite(output_file, img[:, :, ::-1])  # Flip channel order
+        print("Saved %s" % output_file)
+        return
 
-        if cfg.imshow:
-            cv2.imshow("Affordance mask", affordance_mask[:, ::-1])
-            cv2.imshow("Affordance over image", aff_over_img[:, :, ::-1])
-            cv2.imshow("Flow", flow_img[:, :, ::-1])
-            cv2.imshow("Flow over image", flow_over_img[:, :, ::-1])
-            if np_comprez:
-                cv2.imshow("gt mask", gt_aff[:, ::-1])
-                cv2.imshow("gt mask over image", gt_aff_img[:, :, ::-1])
-                cv2.imshow("gt flow", gt_flow[:, :, ::-1])
-                cv2.imshow("gt flow over image", gt_flow_img[:, :, ::-1])
-            cv2.waitKey(0)
+
+    def show_images(self, affordance_mask, aff_over_img, flow_img, flow_over_img, flag_gt, gt_aff, gt_aff_img, gt_flow, gt_flow_img):
+        cv2.imshow("Affordance mask", affordance_mask[:, ::-1])
+        cv2.imshow("Affordance over image", aff_over_img[:, :, ::-1])
+        cv2.imshow("Flow", flow_img[:, :, ::-1])
+        cv2.imshow("Flow over image", flow_over_img[:, :, ::-1])
+        #if not no_target:
+        #    cv2.imshow("Target image", target_img[:, :, ::-1])
+
+        if flag_gt:
+            cv2.imshow("gt mask", gt_aff[:, ::-1])
+            cv2.imshow("gt mask over image", gt_aff_img[:, :, ::-1])
+            cv2.imshow("gt flow", gt_flow[:, :, ::-1])
+            cv2.imshow("gt flow over image", gt_flow_img[:, :, ::-1])
+        cv2.waitKey(0)
+        return
+
+# Run the code: python ./scripts/viz_affordances.py data_dir=datasets/playdata/demo_affordance/npz_files
+@hydra.main(config_path="../config", config_name="viz_affordances")
+def main(cfg):
+    viz = VizAffordances(cfg)
+    viz.run()
 
 
 if __name__ == "__main__":
-    viz()
+    main()

@@ -1,4 +1,4 @@
-_target_: vr_env.camera.static_camera.StaticCamera
+_target_: vapo.agent.static_camera.StaticCamera
 name: static
 fov: 45
 aspect: 1
