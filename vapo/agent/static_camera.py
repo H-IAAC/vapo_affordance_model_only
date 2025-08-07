@@ -16,7 +16,6 @@ class StaticCamera(Camera):
         height,
         look_at,
         look_from,
-        cid,
         name,
         up_vector=[0, 0, 1],
         robot_id=None,
@@ -45,5 +44,4 @@ class StaticCamera(Camera):
         self.projectionMatrix = p.computeProjectionMatrixFOV(
             fov=fov, aspect=aspect, nearVal=self.nearval, farVal=self.farval
         )
-        self.cid = cid
         self.name = name

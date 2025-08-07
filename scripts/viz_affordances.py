@@ -6,6 +6,7 @@ import hydra
 from hydra.utils import get_original_cwd
 import numpy as np
 from omegaconf.listconfig import ListConfig
+from omegaconf import OmegaConf
 import tqdm
 
 from vapo.affordance.dataset_creation.core.utils import get_files, get_files_regex
@@ -24,7 +25,9 @@ class VizAffordances:
             os.makedirs(self.cfg.output_dir)
         
         self.cam_type = self.cfg.dataset.cam
-        #self.cam = StaticCamera()
+        cam_dir = get_abs_path(self.cfg.paths.camera_config)
+        cam_cfg = OmegaConf.load(cam_dir + "/tabletop_sideview.yaml")
+        self.cam = hydra.utils.instantiate(cam_cfg)
         
         # Transforms
         self.img_size = self.cfg.dataset.img_resize[self.cam_type]
@@ -103,8 +106,8 @@ class VizAffordances:
                     gt_flow_img,
                 )
 
-    '''
-    # from taget_search.py
+
+    # Derived from vapo/agent/core/target_search.py
     def compute_target(self, rgb_img, d_img, centers, mask, aff_probs, object_masks):
 
         # No center detected
@@ -147,7 +150,7 @@ class VizAffordances:
         
         target_pos = world_pts[target_idx]
         return target_pos, no_target, world_pts, target_img
-    '''
+
 
     def unpack_npz(self, filename):
         data = np.load(filename)
