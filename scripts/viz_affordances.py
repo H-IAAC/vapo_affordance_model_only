@@ -35,6 +35,8 @@ class VizAffordances:
         # Image files input and preprocessing
         self.files, self.np_comprez = self.get_filenames()
         self.calculate_gt = self.cfg.calculate_gt
+        self.target_height_override = self.cfg.target_height_override
+        self.find_handle_by_depth = self.cfg.find_handle_by_depth
         self.out_shape = (self.cfg.out_size, self.cfg.out_size)
     
 
@@ -85,8 +87,9 @@ class VizAffordances:
                 gt_flow_img = None
                 gt_flow = None
 
-            #res = self.compute_target(rgb_img, d_img, centers, mask, aff_probs, object_masks)
-            #target_pos, no_target, world_pts, target_img = res
+            res = self.compute_target(rgb_img, d_img, centers, mask, aff_probs, object_masks)
+            target_pos, no_target, world_pts, target_img = res
+            print("Target pos: ", target_pos, " Num_world_pts: ", len(world_pts), " World pts: ", world_pts)
 
             # Save and show
             if self.cfg.save_images:
@@ -97,8 +100,8 @@ class VizAffordances:
                     aff_over_img,
                     flow_img,
                     flow_over_img,
-                    #target_img,
-                    #no_target,
+                    target_img,
+                    no_target,
                     (self.np_comprez and self.calculate_gt),
                     gt_aff,
                     gt_aff_img,
@@ -113,19 +116,11 @@ class VizAffordances:
         # No center detected
         no_target = len(centers) <= 0
         if no_target:
-            return np.array(None), no_target, []
+            return np.array(None), no_target, [], None
 
         max_robustness = 0
         obj_class = np.unique(object_masks)[1:]
         obj_class = obj_class[obj_class != 0]  # remove background class
-
-        # Look for most likely center
-        for i, o in enumerate(centers):
-            # Mean prob of being class 1 (foreground)
-            robustness = np.mean(aff_probs[object_masks == obj_class[i], 1])
-            if robustness > max_robustness:
-                max_robustness = robustness
-                target_idx = i
 
         # World coords
         world_pts = []
@@ -133,8 +128,31 @@ class VizAffordances:
         new_shape = d_img.shape[:2]
         for o in centers:
             o = resize_center(o, pred_shape, new_shape)
-            world_pt = self.get_world_pt(o, cam, d_img, env)
+            world_pt = self.get_world_pt(o, self.cam, d_img)
             world_pts.append(world_pt)
+
+        # If flag is true on config file, select highest point instead of most robust
+        if self.target_height_override:
+            max_height = -1
+            target_idx = 0
+            for i, pt in enumerate(world_pts):
+                if pt[-1] > max_height:
+                    target_pos = pt
+                    max_height = pt[-1]
+                    target_idx = i
+
+        
+        # Look for most likely/robust center
+        else:
+            target_idx = 0
+            for i, o in enumerate(centers):
+                # Mean prob of being class 1 (foreground)
+                robustness = np.mean(aff_probs[object_masks == obj_class[i], 1])
+                if robustness > max_robustness:
+                    max_robustness = robustness
+                    target_idx = i
+            target_pos = world_pts[target_idx]
+
 
         # Recover target
         v, u = resize_center(centers[target_idx], pred_shape, new_shape)
@@ -148,8 +166,22 @@ class VizAffordances:
             line_type=cv2.LINE_AA,
         )
         
-        target_pos = world_pts[target_idx]
         return target_pos, no_target, world_pts, target_img
+
+
+    def get_world_pt(self, pixel, cam, depth):
+        x = pixel
+        v, u = pixel
+        if self.find_handle_by_depth:
+            # Searches in an n×n window around the original pixel
+            # for the point with minimum depth (closest object surface).
+            n = 10
+            depth_window = depth[x[0] - n : x[0] + n, x[1] - n : x[1] + n]
+            proposal = np.argwhere(depth_window == np.min(depth_window))[0]
+            v = x[0] - n + proposal[0]
+            u = x[1] - n + proposal[1]
+        world_pt = np.array(cam.deproject([u, v], depth))
+        return world_pt
 
 
     def unpack_npz(self, filename):
@@ -231,13 +263,26 @@ class VizAffordances:
         return
 
 
-    def show_images(self, affordance_mask, aff_over_img, flow_img, flow_over_img, flag_gt, gt_aff, gt_aff_img, gt_flow, gt_flow_img):
+    def show_images(
+            self,
+            affordance_mask,
+            aff_over_img,
+            flow_img,
+            flow_over_img,
+            target_img,
+            no_target,
+            flag_gt,
+            gt_aff,
+            gt_aff_img,
+            gt_flow,
+            gt_flow_img
+        ):
         cv2.imshow("Affordance mask", affordance_mask[:, ::-1])
         cv2.imshow("Affordance over image", aff_over_img[:, :, ::-1])
         cv2.imshow("Flow", flow_img[:, :, ::-1])
         cv2.imshow("Flow over image", flow_over_img[:, :, ::-1])
-        #if not no_target:
-        #    cv2.imshow("Target image", target_img[:, :, ::-1])
+        if not no_target:
+            cv2.imshow("Target image", target_img[:, :, ::-1])
 
         if flag_gt:
             cv2.imshow("gt mask", gt_aff[:, ::-1])

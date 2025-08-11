@@ -41,15 +41,22 @@ class Camera:
         Output
             (x, y): np.array; world coordinates of the deprojected point
         """
-        T_world_cam = np.linalg.inv(np.array(self.viewMatrix).reshape((4, 4)).T)
-
         u, v = point
         z = depth_img[v, u]
         foc = self.height / (2 * np.tan(np.deg2rad(self.fov) / 2))
         x = (u - self.width // 2) * z / foc
         y = -(v - self.height // 2) * z / foc
         z = -z
-        world_pos = T_world_cam @ np.array([x, y, z, 1])
+        world_pos = self.T_world_cam @ np.array([x, y, z, 1])
         if not homogeneous:
             world_pos = world_pos[:3]
         return world_pos
+    
+    def cam_info(self):
+        return (
+            self.width,
+            self.height,
+            self.fov,
+            self.look_from,
+            self.look_at
+        )

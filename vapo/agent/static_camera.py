@@ -45,3 +45,5 @@ class StaticCamera(Camera):
             fov=fov, aspect=aspect, nearVal=self.nearval, farVal=self.farval
         )
         self.name = name
+        self.T_world_cam = np.linalg.inv(np.array(self.viewMatrix).reshape((4, 4)).T)
+
