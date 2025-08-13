@@ -88,7 +88,15 @@ class VizAffordances:
 
             res = self.compute_target(rgb_img, d_img, centers, mask, aff_probs, object_masks)
             target_pos, no_target, world_pts, target_img = res
-            print("Target pos: ", target_pos, " Num_world_pts: ", len(world_pts), " World pts: ", world_pts)
+
+            # Show info on terminal
+            rounded_world_pts = [np.round(pt, 2) for pt in world_pts]
+            if not no_target:
+                print("\nTarget position: ", target_pos, "\nNumber of world points: ", len(world_pts), "\nWorld points: ")
+            else:
+                print("\nNo target found. Number of world points: ", len(world_pts), "\nWorld points: ")
+            for pt in rounded_world_pts:
+                print(pt)
 
             # Save and show
             if self.cfg.save_images:
