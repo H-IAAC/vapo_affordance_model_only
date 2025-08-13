@@ -12,7 +12,6 @@ import tqdm
 from vapo.affordance.dataset_creation.core.utils import get_files, get_files_regex
 from vapo.affordance.utils.img_utils import get_aff_imgs, resize_center, transform_and_predict
 from vapo.affordance.utils.utils import get_abs_path, get_transforms, load_from_hydra
-from vapo.agent.static_camera import StaticCamera
 
 
 class VizAffordances:
@@ -249,6 +248,7 @@ class VizAffordances:
             d.extend(im_lst)
         return d, True
 
+
     def save_images(self, filename, img):
         _, tail = os.path.split(filename)
         split = tail.split(".")
@@ -291,6 +291,7 @@ class VizAffordances:
             cv2.imshow("gt flow over image", gt_flow_img[:, :, ::-1])
         cv2.waitKey(0)
         return
+
 
 # Run the code: python ./scripts/viz_affordances.py data_dir=datasets/playdata/demo_affordance/npz_files
 @hydra.main(config_path="../config", config_name="viz_affordances")
