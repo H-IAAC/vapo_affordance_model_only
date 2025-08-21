@@ -55,7 +55,6 @@ wandb:
   mode: offline
 
 # For visualization
-calculate_gt: False  # Calculate ground truth affordances from data in the npz files
 target_height_override: True # If flag is true, then the target selected is the highest point instead of most robust
 
 # The detected object center may not be perfectly aligned with the actual handle. Use this to

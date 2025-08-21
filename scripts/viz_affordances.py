@@ -1,3 +1,4 @@
+from fileinput import filename
 import json
 import os
 
@@ -33,7 +34,6 @@ class VizAffordances:
         self.aff_transforms = get_transforms(self.cfg.affordance.transforms.validation, self.img_size)
         # Image files input and preprocessing
         self.files, self.np_comprez = self.get_filenames()
-        self.calculate_gt = self.cfg.calculate_gt
         self.target_height_override = self.cfg.target_height_override
         self.find_handle_by_depth = self.cfg.find_handle_by_depth
         self.out_shape = (self.cfg.out_size, self.cfg.out_size)
@@ -51,10 +51,11 @@ class VizAffordances:
         for filename in tqdm.tqdm(self.files):
 
             if self.np_comprez:
-                rgb_img, d_img, gt_centers, gt_mask, gt_directions = self.unpack_npz(filename)
+                rgb_img, d_img = self.unpack_npz(filename)
             else:
-                rgb_img = cv2.imread(filename, cv2.COLOR_BGR2RGB)
+                rgb_img = cv2.cvtColor(cv2.imread(filename), cv2.COLOR_BGR2RGB)
                 self.out_shape = np.shape(rgb_img)[:2]
+                d_img = np.zeros(rgb_img.shape[:2])  # fallback
             
             # Affordance prediction
             res = transform_and_predict(self.model, self.aff_transforms, rgb_img)
@@ -68,23 +69,6 @@ class VizAffordances:
                 cam=self.cam_type,
                 n_classes=aff_probs.shape[-1],
             )
-
-            # Calculate for ground truth if applicable
-            if self.np_comprez and self.calculate_gt:
-                gt_aff, gt_aff_img, gt_flow_img, gt_flow = get_aff_imgs(
-                rgb_img,
-                gt_mask.squeeze(),
-                gt_directions,
-                gt_centers,
-                self.out_shape,
-                cam=self.cam_type,
-                n_classes=self.model.n_classes,
-            )
-            else:
-                gt_aff = None
-                gt_aff_img = None
-                gt_flow_img = None
-                gt_flow = None
 
             res = self.compute_target(rgb_img, d_img, centers, mask, aff_probs, object_masks)
             target_pos, no_target, world_pts, target_img = res
@@ -109,11 +93,6 @@ class VizAffordances:
                     flow_over_img,
                     target_img,
                     no_target,
-                    (self.np_comprez and self.calculate_gt),
-                    gt_aff,
-                    gt_aff_img,
-                    gt_flow,
-                    gt_flow_img,
                 )
 
 
@@ -195,17 +174,7 @@ class VizAffordances:
         data = np.load(filename)
         rgb_img = data["frame"]
         d_img = data["d_img"] # depth image
-        if self.calculate_gt:
-            # gt == ground truth
-            gt_centers = data["centers"]
-            gt_mask = data["mask"].squeeze()
-            gt_mask = (gt_mask / 255).astype("uint8")
-            gt_directions = data["directions"]
-        else:
-            gt_centers = None
-            gt_mask = None
-            gt_directions = None
-        return rgb_img, d_img, gt_centers, gt_mask, gt_directions
+        return rgb_img, d_img
 
 
     def get_filenames(self):
@@ -227,7 +196,7 @@ class VizAffordances:
                 files += get_files(dir_i, "png")
         else:
             if get_eval_files:
-                files, np_comprez = self.get_validation_files(self)
+                files, np_comprez = self.get_validation_files()
             else:
                 data_dir = get_abs_path(data_dir)
                 if not os.path.exists(data_dir):
@@ -279,24 +248,14 @@ class VizAffordances:
             flow_over_img,
             target_img,
             no_target,
-            flag_gt,
-            gt_aff,
-            gt_aff_img,
-            gt_flow,
-            gt_flow_img
         ):
-        cv2.imshow("Affordance mask", affordance_mask[:, ::-1])
+        cv2.imshow("Affordance mask", affordance_mask)
         cv2.imshow("Affordance over image", aff_over_img[:, :, ::-1])
         cv2.imshow("Flow", flow_img[:, :, ::-1])
         cv2.imshow("Flow over image", flow_over_img[:, :, ::-1])
         if not no_target:
             cv2.imshow("Target image", target_img[:, :, ::-1])
 
-        if flag_gt:
-            cv2.imshow("gt mask", gt_aff[:, ::-1])
-            cv2.imshow("gt mask over image", gt_aff_img[:, :, ::-1])
-            cv2.imshow("gt flow", gt_flow[:, :, ::-1])
-            cv2.imshow("gt flow over image", gt_flow_img[:, :, ::-1])
         cv2.waitKey(0)
         return
 
