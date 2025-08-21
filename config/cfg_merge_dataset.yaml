@@ -1,5 +1,0 @@
-# Paths to where episodes_split.json is stored for each dataset
-data_lst: 
-  - ../datasets/tabletop/tabletop_kitchen
-  - ../datasets/tabletop/tabletop_misc
-  - ../datasets/tabletop/tabletop_tools
