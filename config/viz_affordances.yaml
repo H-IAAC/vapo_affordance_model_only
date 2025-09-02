@@ -6,8 +6,6 @@ defaults:
   - override hydra/hydra_logging: colorlog
   - override hydra/job_logging: colorlog
 
-get_eval_files: False
-
 n_epochs: 50
 rand_crop: 0.8
 

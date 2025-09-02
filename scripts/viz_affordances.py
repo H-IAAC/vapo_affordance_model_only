@@ -1,16 +1,13 @@
-from fileinput import filename
-import json
 import os
 
 import cv2
 import hydra
-from hydra.utils import get_original_cwd
 import numpy as np
 from omegaconf.listconfig import ListConfig
 from omegaconf import OmegaConf
 import tqdm
 
-from vapo.affordance.dataset_creation.core.utils import get_files, get_files_regex
+from vapo.affordance.dataset_creation.core.utils import get_files_regex
 from vapo.affordance.utils.img_utils import get_aff_imgs, resize_center, transform_and_predict
 from vapo.affordance.utils.utils import get_abs_path, get_transforms, load_from_hydra
 
@@ -32,8 +29,9 @@ class VizAffordances:
         # Transforms
         self.img_size = self.cfg.dataset.img_resize[self.cam_type]
         self.aff_transforms = get_transforms(self.cfg.affordance.transforms.validation, self.img_size)
+        
         # Image files input and preprocessing
-        self.files, self.np_comprez = self.get_filenames()
+        self.npz_files, self.img_dict = self.get_filenames()
         self.target_height_override = self.cfg.target_height_override
         self.find_handle_by_depth = self.cfg.find_handle_by_depth
         self.out_shape = (self.cfg.out_size, self.cfg.out_size)
@@ -48,53 +46,84 @@ class VizAffordances:
 
 
     def run(self):
-        for filename in tqdm.tqdm(self.files):
 
-            if self.np_comprez:
+        if len(self.npz_files) > 0:
+            for filename in tqdm.tqdm(self.npz_files):
+                print(filename)
                 rgb_img, d_img = self.unpack_npz(filename)
-            else:
-                rgb_img = cv2.cvtColor(cv2.imread(filename), cv2.COLOR_BGR2RGB)
-                self.out_shape = np.shape(rgb_img)[:2]
-                d_img = np.zeros(rgb_img.shape[:2])  # fallback
-            
-            # Affordance prediction
-            res = transform_and_predict(self.model, self.aff_transforms, rgb_img)
-            centers, mask, directions, aff_probs, object_masks = res
-            affordance_mask, aff_over_img, flow_over_img, flow_img = get_aff_imgs(
-                rgb_img,
-                mask,
-                directions,
-                centers,
-                self.out_shape,
-                cam=self.cam_type,
-                n_classes=aff_probs.shape[-1],
-            )
+                self.compute_aff_target(rgb_img, d_img, filename)
+                cv2.waitKey(0)
+        else:
+            print("No NPZ files found.")
 
-            res = self.compute_target(rgb_img, d_img, centers, mask, aff_probs, object_masks)
-            target_pos, no_target, world_pts, target_img = res
+        '''
+        if len(self.img_dict) > 0:
+            for base, paths in tqdm.tqdm(self.img_dict.items()):
+                filename_rgb = paths['rgb']
+                filename_depth = paths['depth']
+                rgb_img = cv2.cvtColor(cv2.imread(filename_rgb), cv2.COLOR_BGR2RGB)
+                self.out_shape = np.shape(rgb_img)[:2]
+                
+                d_img = cv2.imread(filename_depth, cv2.IMREAD_UNCHANGED)
+                print("Type:", type(d_img))
+                print("Shape:", d_img.shape)
+                print("Dtype:", d_img.dtype)
+                print("Min:", np.min(d_img))
+                print("Max:", np.max(d_img))
+                print("Sample values:", d_img.flatten()[:10])
+                if d_img is None:
+                    d_img = np.zeros(rgb_img.shape[:2])  # fallback
+                    print(f"Warning: Depth image use of {filename_depth} failed. Using fallback.")
+                
+                self.compute_aff_target(rgb_img, d_img, filename_rgb)
+                cv2.waitKey(0)
+
+
+        else:
+            print("No RGB files found.")
+        '''
+        return
+
+    def compute_aff_target(self, rgb_img, d_img, filename):
+        # Affordance prediction
+        res = transform_and_predict(self.model, self.aff_transforms, rgb_img)
+        centers, mask, directions, aff_probs, object_masks = res
+        affordance_mask, aff_over_img, flow_over_img, flow_img = get_aff_imgs(
+            rgb_img,
+            mask,
+            directions,
+            centers,
+            self.out_shape,
+            cam=self.cam_type,
+            n_classes=aff_probs.shape[-1],
+        )
+
+        res = self.compute_target(rgb_img, d_img, centers, mask, aff_probs, object_masks)
+        target_pos, no_target, world_pts, target_img = res
 
             # Show info on terminal
-            rounded_world_pts = [np.round(pt, 2) for pt in world_pts]
-            if not no_target:
-                print("\nTarget position: ", target_pos, "\nNumber of world points: ", len(world_pts), "\nWorld points: ")
-            else:
-                print("\nNo target found. Number of world points: ", len(world_pts), "\nWorld points: ")
-            for pt in rounded_world_pts:
-                print(pt)
+        rounded_world_pts = [np.round(pt, 2) for pt in world_pts]
+        if not no_target:
+            print("\nTarget position: ", target_pos, "\nNumber of world points: ", len(world_pts), "\nWorld points: ")
+        else:
+            print("\nNo target found. Number of world points: ", len(world_pts), "\nWorld points: ")
+        for pt in rounded_world_pts:
+            print(pt)
 
-            # Save and show
-            if self.cfg.save_images:
-                self.save_images(filename, flow_over_img)
-            if self.cfg.imshow:
-                self.show_images(
-                    affordance_mask,
-                    aff_over_img,
-                    flow_img,
-                    flow_over_img,
-                    target_img,
-                    no_target,
-                )
-
+        # Save and show
+        if self.cfg.save_images:
+            self.save_images(filename, flow_over_img)
+        if self.cfg.imshow:
+            self.show_images(
+                affordance_mask,
+                aff_over_img,
+                flow_img,
+                flow_over_img,
+                target_img,
+                no_target,
+            )
+            
+        return
 
     # Derived from vapo/agent/core/target_search.py
     def compute_target(self, rgb_img, d_img, centers, mask, aff_probs, object_masks):
@@ -176,55 +205,45 @@ class VizAffordances:
         d_img = data["d_img"] # depth image
         return rgb_img, d_img
 
-
+    # Data folder example:
+    # Script may be called with parameter datasets/playdata/viz_affordances/input_files
+    # Then, inside input files, there must be <cam_type>/<file_type>/<files.ext>
+    # as in static/rgb/0001.png
     def get_filenames(self):
-        data_dir = self.cfg.data_dir
-        get_eval_files = self.cfg.get_eval_files
+        data_dirs = self.cfg.data_dir
         cam_type = self.cam_type
-        files = []
-        np_comprez = False
-        if isinstance(data_dir, ListConfig):
-            for dir_i in data_dir:
-                dir_i = get_abs_path(dir_i)
-                if not os.path.exists(dir_i):
-                    print("Path does not exist: %s" % dir_i)
-                    continue
-                files += get_files(dir_i, "npz")
-                if len(files) > 0:
-                    np_comprez = True
-                files += get_files(dir_i, "jpg")
-                files += get_files(dir_i, "png")
-        else:
-            if get_eval_files:
-                files, np_comprez = self.get_validation_files()
-            else:
-                data_dir = get_abs_path(data_dir)
-                if not os.path.exists(data_dir):
-                    print("Path does not exist: %s" % data_dir)
-                    return [], False
-                for ext in ["npz", "jpg", "png"]:
-                    search_str = "**/%s*/*.%s" % (cam_type, ext)
-                    files += get_files_regex(data_dir, search_str, recursive=True)
-                    if len(files) > 0 and ext == "npz":
-                        np_comprez = True
-        return files, np_comprez
+        npz_files = []
+        rgb_files = []
+        depth_files = []
 
+        # Ensure data_dirs is always a list
+        if not isinstance(data_dirs, (list, ListConfig)):
+            data_dirs = [data_dirs]
 
-    # Load validation files for custom dataset
-    def get_validation_files(self):
-        data_dir = self.cfg.data_dir
-        cam_type = self.cam_type
-        data_dir = os.path.join(get_original_cwd(), data_dir)
-        data_dir = os.path.abspath(data_dir)
-        json_file = os.path.join(data_dir, "episodes_split.json")
-        with open(json_file) as f:
-            data = json.load(f)
-        d = []
-        for ep, imgs in data["validation"].items():
-            im_lst = [data_dir + "/%s/data/%s.npz" % (ep, img_path) for img_path in imgs if cam_type in img_path]
-            d.extend(im_lst)
-        return d, True
+        for dir_i in data_dirs:
+            dir_i = get_abs_path(dir_i)
+            if not os.path.exists(dir_i):
+                print("Path does not exist: %s" % dir_i)
+                continue
 
+            for ext in ["npz", "jpg", "png"]:
+                for file_type in ["npz", "rgb", "depth"]:
+                    search_str = f"**/{cam_type}*/{file_type}/*.{ext}"
+                    found_files = get_files_regex(dir_i, search_str, recursive=True, print_warning=False)
+                    if file_type == "npz" and ext == "npz":
+                        npz_files += found_files
+                    elif file_type == "rgb" and ext in ["jpg", "png"]:
+                        rgb_files += found_files
+                    elif file_type == "depth" and ext in ["jpg", "png"]:
+                        depth_files += found_files
+
+        # Build dict assuming rgb_files and depth_files are ordered and correspond
+        img_dict = {}
+        for rgb_path, depth_path in zip(rgb_files, depth_files):
+            base = os.path.splitext(os.path.basename(rgb_path))[0]
+            img_dict[base] = {'rgb': rgb_path, 'depth': depth_path}
+
+        return npz_files, img_dict
 
     def save_images(self, filename, img):
         _, tail = os.path.split(filename)
@@ -255,8 +274,6 @@ class VizAffordances:
         cv2.imshow("Flow over image", flow_over_img[:, :, ::-1])
         if not no_target:
             cv2.imshow("Target image", target_img[:, :, ::-1])
-
-        cv2.waitKey(0)
         return
 
 

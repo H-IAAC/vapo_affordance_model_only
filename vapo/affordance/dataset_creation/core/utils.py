@@ -248,9 +248,9 @@ def save_dict_data(data_dict, directory, sub_dir, save_viz=False):
         np.savez_compressed(filename, **img_dict)
 
 
-def get_files_regex(path, search_str, recursive):
+def get_files_regex(path, search_str, recursive, print_warning=True):
     files = glob.glob(os.path.join(path, search_str), recursive=recursive)
-    if not files:
+    if not files and print_warning:
         print("No *.%s files found in %s" % (search_str, path))
     files.sort()
     return files

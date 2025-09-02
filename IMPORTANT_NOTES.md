@@ -24,3 +24,11 @@ export PYTHONPATH=/home/admi/vapo_aff
 ## Install notes:
 
 Before anything, make sure the nvidia drivers, smi and cuda toolkit are installed and working. Install Eigen, then the hough_vouting, and for last run `python setup.py install`
+
+## Data notes:
+
+# Data folder example:
+
+Script may be called with parameter datasets/playdata/viz_affordances/input_files
+
+Then, inside input files, there must be <cam_type>/<file_type>/<files.ext> as in static/rgb/0001.png
