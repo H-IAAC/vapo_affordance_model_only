@@ -197,7 +197,9 @@ def get_aff_imgs(rgb_img, mask, directions, centers, out_shape=None, cam="", n_c
     """
     pred_shape = np.array(mask.shape)
     if out_shape is None:
-        out_shape = rgb_img.shape[:2]
+        height, width = rgb_img.shape[:2]
+        out_shape = (width, height)
+    
     out_shape = tuple(out_shape)
 
     orig_img = cv2.resize(rgb_img, out_shape)

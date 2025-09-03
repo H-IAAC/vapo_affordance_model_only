@@ -34,7 +34,7 @@ class VizAffordances:
         self.npz_files, self.img_dict = self.get_filenames()
         self.target_height_override = self.cfg.target_height_override
         self.find_handle_by_depth = self.cfg.find_handle_by_depth
-        self.out_shape = (self.cfg.out_size, self.cfg.out_size)
+        self.out_shape = None #general for all image sizes
     
 
     # Load model based on hydra config file
@@ -46,7 +46,6 @@ class VizAffordances:
 
 
     def run(self):
-
         if len(self.npz_files) > 0:
             for filename in tqdm.tqdm(self.npz_files):
                 print(filename)
@@ -56,24 +55,20 @@ class VizAffordances:
         else:
             print("No NPZ files found.")
 
-        '''
+        cv2.destroyAllWindows()
         if len(self.img_dict) > 0:
             for base, paths in tqdm.tqdm(self.img_dict.items()):
                 filename_rgb = paths['rgb']
                 filename_depth = paths['depth']
                 rgb_img = cv2.cvtColor(cv2.imread(filename_rgb), cv2.COLOR_BGR2RGB)
-                self.out_shape = np.shape(rgb_img)[:2]
-                
+
                 d_img = cv2.imread(filename_depth, cv2.IMREAD_UNCHANGED)
-                print("Type:", type(d_img))
-                print("Shape:", d_img.shape)
-                print("Dtype:", d_img.dtype)
-                print("Min:", np.min(d_img))
-                print("Max:", np.max(d_img))
-                print("Sample values:", d_img.flatten()[:10])
                 if d_img is None:
-                    d_img = np.zeros(rgb_img.shape[:2])  # fallback
+                    d_img = np.zeros(rgb_img.shape[:2], dtype=np.float32)  # fallback
                     print(f"Warning: Depth image use of {filename_depth} failed. Using fallback.")
+
+                elif d_img.dtype == np.uint16:
+                    d_img = d_img.astype(np.float32) / 1000.0  # meter conversion
                 
                 self.compute_aff_target(rgb_img, d_img, filename_rgb)
                 cv2.waitKey(0)
@@ -81,10 +76,9 @@ class VizAffordances:
 
         else:
             print("No RGB files found.")
-        '''
         return
 
-    def compute_aff_target(self, rgb_img, d_img, filename):
+    def compute_aff_target(self, rgb_img, d_img, filename, return_data = False):
         # Affordance prediction
         res = transform_and_predict(self.model, self.aff_transforms, rgb_img)
         centers, mask, directions, aff_probs, object_masks = res
@@ -98,10 +92,13 @@ class VizAffordances:
             n_classes=aff_probs.shape[-1],
         )
 
+        # target_pos is an element of world_pts; world_pts is a list
+        # target_pos is a numpy.ndarray with 3 numbers of float64 type
+        # no_target is a boolean
         res = self.compute_target(rgb_img, d_img, centers, mask, aff_probs, object_masks)
         target_pos, no_target, world_pts, target_img = res
 
-            # Show info on terminal
+        # Show info on terminal
         rounded_world_pts = [np.round(pt, 2) for pt in world_pts]
         if not no_target:
             print("\nTarget position: ", target_pos, "\nNumber of world points: ", len(world_pts), "\nWorld points: ")
@@ -122,7 +119,9 @@ class VizAffordances:
                 target_img,
                 no_target,
             )
-            
+        if return_data:
+            return target_pos, no_target, world_pts
+
         return
 
     # Derived from vapo/agent/core/target_search.py
@@ -268,12 +267,42 @@ class VizAffordances:
             target_img,
             no_target,
         ):
-        cv2.imshow("Affordance mask", affordance_mask)
-        cv2.imshow("Affordance over image", aff_over_img[:, :, ::-1])
-        cv2.imshow("Flow", flow_img[:, :, ::-1])
-        cv2.imshow("Flow over image", flow_over_img[:, :, ::-1])
+
+        def resize_for_display(img, max_dim=480):
+            h, w = img.shape[:2]
+            if max(h, w) > max_dim:
+                scale = max_dim / max(h, w)
+                new_size = (int(w * scale), int(h * scale))
+                return cv2.resize(img, new_size)
+            return img
+    
+        imgs = [
+            resize_for_display(cv2.cvtColor(affordance_mask, cv2.COLOR_GRAY2BGR)),
+            resize_for_display(aff_over_img[:, :, ::-1]),
+            resize_for_display(flow_img[:, :, ::-1]),
+            resize_for_display(flow_over_img[:, :, ::-1]),
+        ]
         if not no_target:
-            cv2.imshow("Target image", target_img[:, :, ::-1])
+            imgs.append(resize_for_display(target_img[:, :, ::-1]))
+
+        # Calculate number of columns per row
+        n = len(imgs)
+        num_rows = 3
+        cols = (n + num_rows - 1) // num_rows  # Ceiling division
+
+        # Pad with blank images if needed
+        blank = np.zeros_like(imgs[0])
+        imgs_padded = imgs + [blank] * (num_rows * cols - n)
+
+        # Build rows
+        rows = []
+        for i in range(num_rows):
+            row_imgs = imgs_padded[i*cols:(i+1)*cols]
+            row = np.hstack(row_imgs)
+            rows.append(row)
+
+        # Stack rows vertically
+        cv2.imshow("Affordance Visualizations", np.vstack(rows))
         return
 
 
