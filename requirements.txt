@@ -1,0 +1,12 @@
+torch
+pytorch-lightning
+segmentation-models-pytorch
+hydra-core
+opencv-python
+matplotlib
+pypng
+scipy
+omegaconf
+wandb
+pybullet
+scikit-learn
