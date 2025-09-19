@@ -15,7 +15,6 @@ setup(
         "pypng",
         "scipy",
         "omegaconf",
-        "gym",
         "wandb",
         "pybullet",
         "scikit-learn",
