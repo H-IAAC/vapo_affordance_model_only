@@ -3,6 +3,7 @@ import pytorch_lightning as pl
 import segmentation_models_pytorch as smp
 import torch
 import torch.nn as nn
+import inspect
 
 from vapo.affordance.hough_voting import hough_voting as hv
 from vapo.affordance.utils.losses import (
@@ -125,7 +126,16 @@ class AffordanceModel(pl.LightningModule):
     def forward(self, x):
         # in lightning, forward defines the prediction/inference actions
         features = self.unet.encoder(x)
-        decoder_output = self.unet.decoder(features)
+
+        # For compatibility
+        sig = inspect.signature(self.unet.decoder.forward)
+        n_params = len(sig.parameters)
+        print("Number of parameters in decoder:", n_params)
+        if n_params == 1:  # (self, features)
+            decoder_output = self.unet.decoder(features)
+        else:              # (self, f1, f2, ..., fn)
+            decoder_output = self.unet.decoder(*features)
+
         aff_logits = self.unet.segmentation_head(decoder_output)
         center_direction_prediction = self.center_direction_net(decoder_output)
 
